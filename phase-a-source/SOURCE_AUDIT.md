@@ -174,3 +174,19 @@ Move forward to the next unfinished project task.
    successful `/api/live` and `/api/match/<id>`, empty results,
    API error responses, connection timeouts and invalid JSON.
    No real key is used anywhere (fake test key only).
+
+## 9. PHASE A FIX 2 — 2026-11-15 (ChatGPT conditional accept)
+
+**Backup must be an exact pre-run snapshot.** The runner created
+the `schema_migrations` table before the backup, so the backup
+contained that write. Order is now: (1) read existing records
+without writing, (2) if migrations are pending, make the backup
+FIRST and verify it (SHA-256 must match the pre-run database
+byte for byte, plus integrity check), (3) only then create
+`schema_migrations` if missing, (4) apply migrations atomically.
+A run with nothing pending writes nothing at all. Proved by
+three tests in `tests/test_migrations.py`: backup SHA equals
+the pre-run SHA and the backup predates the applied migration;
+with no table present the backup contains no such table while
+the final database does; with nothing pending no backup is made
+and the SHA is unchanged.

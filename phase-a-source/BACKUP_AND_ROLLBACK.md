@@ -2,11 +2,21 @@
 
 ## Rule
 
-Never work without a backup. Before every migration, a timestamped
-copy of `database.db` is made in `backend/backups/` and its SHA-256
-is appended to `backend/backups/manifest-sha256.txt`. Backups are
-never overwritten. The original uploaded ZIP is the ultimate fallback;
-its SHA-256 is `b757e5e0ba941eeb1469445405b259006c7dbd9a595958e83dd9ca24c43efc28`.
+Never work without a backup. Before any migration is applied, a
+timestamped copy of `database.db` is made in `backend/backups/`
+and its SHA-256 is appended to
+`backend/backups/manifest-sha256.txt`. Backups are never
+overwritten. The runner verifies the backup before writing
+anything: its SHA-256 must match the database file byte for byte
+and its integrity check must pass — so the backup is an exact
+pre-run snapshot, not a copy taken after some write already
+happened. (This order was a ChatGPT conditional-accept finding:
+the earlier runner created the `schema_migrations` table before
+the backup, so the backup was not an exact snapshot. Fixed
+2026-11-15; see `tests/test_migrations.py`.) No backup is made
+when nothing is pending or in dry-run mode. The original uploaded
+ZIP is the ultimate fallback; its SHA-256 is
+`b757e5e0ba941eeb1469445405b259006c7dbd9a595958e83dd9ca24c43efc28`.
 
 The 8 original `database_before_*.db` snapshots are preserved
 untouched. Do not delete them.
@@ -46,7 +56,12 @@ python3 migrations/run_migrations.py
 
 The runner first makes a backup (as above), then applies pending
 `migrations/*.sql` files in filename order, recording each one in
-the `schema_migrations` table. A second run is a safe no-op.
+the `schema_migrations` table. A second run is a safe no-op. The
+exact order is: (1) read existing records without writing,
+(2) if migrations are pending, make and SHA-verify the backup,
+(3) only then create `schema_migrations` if missing, (4) apply
+pending migrations atomically. A run with nothing pending writes
+nothing at all.
 
 Dry run (lists pending migrations, changes nothing, makes no backup):
 

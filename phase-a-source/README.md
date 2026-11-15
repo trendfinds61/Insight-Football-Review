@@ -125,9 +125,16 @@ python3 migrations/run_migrations.py          # apply pending migrations
 python3 migrations/run_migrations.py --dry-run  # list pending only
 ```
 
-The runner backs up `database.db` first (see below), applies
-`migrations/*.sql` in order, and records each one in the
-`schema_migrations` table. A second run is a safe no-op.
+The runner first reads the existing migration records (without
+writing anything) and works out which migrations are pending.
+Only if migrations are pending does it back up `database.db`
+(see below) — and the backup is verified before anything is
+written: its SHA-256 must match the pre-run database byte for
+byte, so the backup is an exact pre-run snapshot. Only then is
+the `schema_migrations` table created (if missing), and the
+pending `migrations/*.sql` are applied in order, each atomically.
+A second run is a safe no-op, and a run with nothing pending
+writes nothing at all (no backup, no table creation).
 
 `--dry-run` is genuinely read-only: the database is opened with
 SQLite URI `mode=ro`, so no table is created, no backup is made
