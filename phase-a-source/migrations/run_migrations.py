@@ -6,15 +6,24 @@ Usage (run from the backend/ directory):
     python3 migrations/run_migrations.py --db database.db --dry-run
 
 What it does, in order:
-  1. Backs up the database first, using backup.py logic: a timestamped
-     copy in backend/backups/ plus a SHA-256 manifest entry. It never
-     overwrites an existing backup. No backup is made when there is
-     nothing pending, or in dry-run mode.
-  2. Applies every *.sql file in migrations/ in filename order, but
-     only those not already recorded in the schema_migrations table.
-  3. Records each applied migration (filename + SHA-256 + time) in
-     schema_migrations, so a second run is a safe no-op.
-  4. Prints before/after row counts for news and rss_items.
+  1. Reads the existing migration records WITHOUT writing
+     anything, and determines which *.sql files are pending.
+  2. If migrations are pending, it backs up the database FIRST,
+     using backup.py logic: a timestamped copy in backend/backups/
+     plus a SHA-256 manifest entry. It never overwrites an existing
+     backup. The backup is then VERIFIED: its SHA-256 must match
+     the database file byte for byte, and its integrity check must
+     pass. If verification fails, the runner stops before writing
+     anything to the database. Because no database write has
+     happened yet, the backup is an exact pre-run snapshot. No
+     backup is made when there is nothing pending, or in dry-run
+     mode.
+  3. Only then, if needed, it creates the schema_migrations
+     bookkeeping table and commits it.
+  4. It applies every pending *.sql file in filename order, each
+     atomically, and records each one (filename + SHA-256 + time)
+     in schema_migrations, so a second run is a safe no-op.
+  5. Prints before/after row counts for news and rss_items.
 
 Dry run (--dry-run) is genuinely read-only:
   - The database is opened with SQLite URI mode=ro, so the file
@@ -44,6 +53,9 @@ Failure and rollback behaviour (verified, see tests/test_migrations.py):
     There is no whole-run rollback: a failure does not undo earlier
     migrations. If the resulting state is unwanted, restore the
     pre-run backup in backend/backups/ (see BACKUP_AND_ROLLBACK.md).
+    That backup is an exact pre-run snapshot: it was made and
+    SHA-verified BEFORE any database write, so restoring it returns
+    the database to its exact pre-run bytes.
   - The schema_migrations bookkeeping table itself is created (if
     missing) and committed before the loop, so a failure never
     leaves the runner unable to record what happened.
@@ -154,6 +166,32 @@ def split_statements(text):
         if body:
             raise ValueError(f"unterminated statement (missing ';'): {tail!r}")
     return stmts
+
+
+def verify_backup(db_path, backup_path, pre_run_sha):
+    """Verify a backup is an exact pre-run snapshot.
+
+    Returns True only when the backup file's SHA-256 matches the
+    database bytes recorded before the backup was made AND the
+    backup passes SQLite's integrity check. Prints the result.
+    Callers must call this BEFORE any database write.
+    """
+    backup_sha = sha256_of(backup_path)
+    if backup_sha != pre_run_sha:
+        print(f"ERROR: backup SHA-256 mismatch: backup {backup_sha} "
+              f"!= pre-run database {pre_run_sha}", file=sys.stderr)
+        return False
+    conn = sqlite3.connect(f"file:{backup_path}?mode=ro", uri=True)
+    try:
+        ok = conn.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+    finally:
+        conn.close()
+    if not ok:
+        print("ERROR: backup failed its integrity check.", file=sys.stderr)
+        return False
+    print(f"Backup verified: SHA-256 matches the pre-run database "
+          f"({backup_sha[:16]}...) and integrity_check is ok.")
+    return True
 
 
 def make_backup(db_path):
@@ -275,13 +313,8 @@ def main():
 
     conn = sqlite3.connect(db_path)
     try:
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS schema_migrations ("
-            " filename TEXT PRIMARY KEY, sha256 TEXT NOT NULL,"
-            " applied_at TEXT NOT NULL)"
-        )
-        conn.commit()
-        applied = {r[0] for r in conn.execute("SELECT filename FROM schema_migrations")}
+        # 1. Read first, write nothing: existing records + before counts.
+        applied = read_applied(conn)
         before = counts(conn)
         print(f"Before: news={before['news']} rss_items={before['rss_items']} "
               f"rss_review={before['rss_review']} rss_bangladesh={before['rss_bangladesh']}")
@@ -292,8 +325,30 @@ def main():
             return 0
         print("Pending migrations:", [p.name for p in pending])
 
+        # 2. Backup FIRST, before any database write, and verify it.
+        #    Nothing above wrote to the database, so this backup is
+        #    an exact pre-run snapshot. If verification fails, stop
+        #    before writing anything.
+        pre_run_sha = sha256_of(db_path)
         backup_path = make_backup(db_path)
+        if not verify_backup(db_path, backup_path, pre_run_sha):
+            print("ERROR: backup verification failed. No migration was "
+                  "applied and nothing was written to the database.",
+                  file=sys.stderr)
+            return 1
 
+        # 3. Only now create the bookkeeping table, if it is missing.
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS schema_migrations ("
+            " filename TEXT PRIMARY KEY, sha256 TEXT NOT NULL,"
+            " applied_at TEXT NOT NULL)"
+        )
+        conn.commit()
+        # Re-read: the table now exists, the records are unchanged.
+        applied = {r[0] for r in conn.execute("SELECT filename FROM schema_migrations")}
+        pending = [p for p in sql_files if p.name not in applied]
+
+        # 4. Apply pending migrations, each atomically.
         for sql_file in pending:
             try:
                 apply_migration(conn, sql_file)
