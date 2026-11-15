@@ -8,6 +8,13 @@ Covers the ChatGPT review findings on migrations/run_migrations.py:
     schema dump are identical before and after, no backup is made,
     and no schema_migrations table is created on a database that
     has none.
+  - the backup is an exact pre-run snapshot: its SHA-256 matches
+    the database bytes recorded before ANY migration-runner
+    database write, and it predates the schema_migrations table
+    creation (a backup taken with no table present contains no
+    such table, while the final database does).
+  - when nothing is pending, the runner writes nothing at all:
+    no backup, no table creation, identical SHA-256.
   - a migration that fails mid-way is rolled back in full: none of
     its statements persist and it is not recorded.
   - a failure between migrations: earlier migrations stay applied
@@ -115,6 +122,84 @@ class MigrationRunnerTestCase(unittest.TestCase):
                 (filename,)).fetchone()[0])
         finally:
             conn.close()
+
+    def latest_backup(self):
+        backups = sorted((self.workdir / "backups").glob("database-*.db"))
+        self.assertEqual(len(backups), 1,
+                         f"expected exactly 1 backup file, got {backups}")
+        return backups[0]
+
+    def test_backup_is_exact_pre_run_snapshot(self):
+        """CONDITIONAL ACCEPT finding: the backup must be an exact
+        pre-run snapshot, made before ANY migration-runner write."""
+        self.inject_migration(
+            "900_ok.sql",
+            "CREATE TABLE ok_marker (id INTEGER);\n")
+        pre_run_sha = sha256_of(self.db_path)
+        result = self.run_runner("--db", "database.db")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("Backup verified", result.stdout)
+        self.assertIn("SHA-256 matches the pre-run database",
+                      result.stdout)
+        backup = self.latest_backup()
+        # The backup file is byte-identical to the database as it
+        # was before the runner wrote anything.
+        self.assertEqual(sha256_of(backup), pre_run_sha)
+        # And it predates the migration itself: no marker table,
+        # no record of the migration that was just applied.
+        conn = sqlite3.connect(f"file:{backup}?mode=ro", uri=True)
+        try:
+            self.assertEqual(
+                conn.execute("PRAGMA integrity_check").fetchone(), ("ok",))
+            self.assertEqual(conn.execute(
+                "SELECT COUNT(*) FROM sqlite_master "
+                "WHERE type='table' AND name='ok_marker'").fetchone()[0], 0)
+            self.assertEqual(conn.execute(
+                "SELECT COUNT(*) FROM schema_migrations "
+                "WHERE filename='900_ok.sql'").fetchone()[0], 0)
+        finally:
+            conn.close()
+        # The real database did get the migration, of course.
+        self.assertTrue(self.has_table("ok_marker"))
+        self.assertTrue(self.recorded("900_ok.sql"))
+
+    def test_backup_predates_schema_migrations_table_creation(self):
+        """The old runner created schema_migrations BEFORE the
+        backup, so the backup contained that write. Now the backup
+        comes first: with no table present at run start, the backup
+        must contain no such table, while the final database does."""
+        conn = sqlite3.connect(self.db_path)
+        conn.execute("DROP TABLE schema_migrations")
+        conn.commit()
+        conn.close()
+        pre_run_sha = sha256_of(self.db_path)
+        result = self.run_runner("--db", "database.db")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("Backup verified", result.stdout)
+        backup = self.latest_backup()
+        self.assertEqual(sha256_of(backup), pre_run_sha)
+        backup_conn = sqlite3.connect(f"file:{backup}?mode=ro", uri=True)
+        try:
+            self.assertEqual(backup_conn.execute(
+                "SELECT COUNT(*) FROM sqlite_master "
+                "WHERE type='table' AND name='schema_migrations'"
+            ).fetchone()[0], 0)
+        finally:
+            backup_conn.close()
+        # The final database has the table, with 001 + 002 recorded.
+        self.assertTrue(self.has_table("schema_migrations"))
+        self.assertTrue(self.recorded("001_create_rss_items_table.sql"))
+        self.assertTrue(self.recorded("002_fix_category_and_senora.sql"))
+
+    def test_no_pending_makes_no_backup_and_no_write(self):
+        before_sha = sha256_of(self.db_path)
+        before = schema_dump(self.db_path)
+        result = self.run_runner("--db", "database.db")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("No pending migrations", result.stdout)
+        self.assertEqual(sha256_of(self.db_path), before_sha)
+        self.assertEqual(schema_dump(self.db_path), before)
+        self.assertFalse((self.workdir / "backups").exists())
 
     def test_dry_run_is_read_only_with_pending_migration(self):
         self.inject_migration(
