@@ -54,6 +54,46 @@ Dry run (lists pending migrations, changes nothing, makes no backup):
 python3 migrations/run_migrations.py --dry-run
 ```
 
+Dry run is genuinely read-only: the runner opens the database
+with SQLite URI `mode=ro`, so it cannot write even by accident.
+No `schema_migrations` table is created, no backup is made, no
+migration is applied and no file is created or changed. This was
+a ChatGPT review finding — the first Phase A runner created the
+`schema_migrations` table before checking `--dry-run`. Verified by
+`tests/test_migrations.py`: file SHA-256 and the full schema dump
+are identical before and after a dry run, including on a database
+that has no `schema_migrations` table at all.
+
+## Migration failure and rollback behaviour (verified)
+
+Each migration is applied atomically: all of its statements plus
+its `schema_migrations` record run inside one explicit
+BEGIN ... COMMIT transaction (the runner splits the SQL file into
+statements instead of using `executescript`, which in Python 3.12
+implicitly commits first and is therefore not atomic — verified by
+experiment 2026-11-15: a failed `executescript` left its first
+UPDATE applied even after `rollback()`).
+
+- If a migration fails, that migration is rolled back in full:
+  none of its statements persist, and it is NOT recorded in
+  `schema_migrations`, so a fixed re-run will try it again.
+- The runner STOPS immediately and returns exit code 1. Later
+  migrations are NOT attempted.
+- Migrations applied BEFORE the failure stay applied and recorded.
+  There is no whole-run rollback. If that state is unwanted,
+  restore the pre-run backup (step 3 under "Full restore" below);
+  the backup is listed in the failure message.
+- The `schema_migrations` table itself is created (if missing) and
+  committed before the loop, so a failure never leaves the runner
+  unable to record what happened.
+
+Failure-injection tests in `tests/test_migrations.py` prove this
+on a temporary database: a two-statement migration whose second
+statement fails leaves no trace (first statement rolled back, not
+recorded), and a run with a good migration followed by a bad one
+applies and records only the good one and never attempts the one
+after the bad one.
+
 ## Rollback — migration 001 (`001_create_rss_items_table.sql`)
 
 No rollback is needed or provided. The migration only runs

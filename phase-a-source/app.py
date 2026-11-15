@@ -75,7 +75,20 @@ def get_db_connection():
 #   international  -> region = 'international', title has no 'transfer'
 #   world          -> region = 'review', title has no 'transfer'
 # (region='review' + a 'transfer' title goes to Transfers, not World.)
+#
+# Phase A fix (ChatGPT review): region='review' means "not classified
+# as a football region", and it contains non-football stories (e.g.
+# rss_items id 1173, the Senora business story, whose link is in a
+# /business/ section). A review item is therefore shown as World
+# Football ONLY when its link is in a football section
+# (link LIKE '%/football/%'). The same football-link rule applies to
+# Transfers, which also draws from the review pool. Non-football
+# review rows stay in the database untouched -- they are excluded
+# from display, never deleted -- and can be reclassified later.
+# World after this fix shows 2 items (Messi Golden Boot, Real Madrid
+# tribute); Senora appears in no football category.
 RSS_BASE = "relevance_status = 'relevant' AND status = 'recent'"
+RSS_FOOTBALL_LINK = "link LIKE '%/football/%'"
 RSS_LIMIT = 20
 
 
@@ -106,6 +119,7 @@ def home():
     rss_world = conn.execute(
         "SELECT * FROM rss_items WHERE " + RSS_BASE +
         " AND region = 'review' AND lower(title) NOT LIKE '%transfer%'"
+        " AND " + RSS_FOOTBALL_LINK +
         " ORDER BY id DESC LIMIT ?",
         (RSS_LIMIT,),
     ).fetchall()
@@ -113,6 +127,7 @@ def home():
     rss_transfers = conn.execute(
         "SELECT * FROM rss_items WHERE " + RSS_BASE +
         " AND region != 'bangladesh' AND lower(title) LIKE '%transfer%'"
+        " AND " + RSS_FOOTBALL_LINK +
         " ORDER BY id DESC LIMIT ?",
         (RSS_LIMIT,),
     ).fetchall()

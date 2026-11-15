@@ -20,7 +20,15 @@ later phases and are not built yet.
    - Bangladesh: `region='bangladesh'`
    - Transfers: any other region, title contains "transfer"
    - International: `region='international'`, title has no "transfer"
-   - World: `region='review'`, title has no "transfer"
+   - World: `region='review'`, title has no "transfer", **and the
+     link is in a football section (`link LIKE '%/football/%'`)**.
+     Phase A fix (ChatGPT review): region `review` also holds
+     non-football stories, so a review item is shown as World
+     Football only when its link proves it is football news. The
+     Senora business story (link `.../business/423945/...`) is
+     therefore shown in no football category, while its database
+     row is preserved untouched in region `review`. The same
+     football-link rule applies to Transfers.
    At most 20 RSS items per category are shown. The "Latest" section
    still shows only `news` items, so RSS items are not shown twice.
 2. **Category sections now render.** `templates/index.html` renders
@@ -120,6 +128,18 @@ python3 migrations/run_migrations.py --dry-run  # list pending only
 The runner backs up `database.db` first (see below), applies
 `migrations/*.sql` in order, and records each one in the
 `schema_migrations` table. A second run is a safe no-op.
+
+`--dry-run` is genuinely read-only: the database is opened with
+SQLite URI `mode=ro`, so no table is created, no backup is made
+and nothing is written. It only lists pending migrations.
+
+Each migration is applied atomically: all of its statements plus
+its `schema_migrations` record run inside one transaction, so a
+failure rolls that migration back in full and the runner stops.
+Migrations applied before the failure stay applied; later ones
+are not attempted. There is no whole-run rollback — restore the
+pre-run backup if the resulting state is unwanted. See
+`BACKUP_AND_ROLLBACK.md` and `tests/test_migrations.py`.
 
 - `001_create_rss_items_table.sql` — creates `rss_items` if missing.
   No-op on the live database (the table already exists).

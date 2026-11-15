@@ -138,3 +138,39 @@ Move forward to the next unfinished project task.
   link `.../business/423945/...`) was corrected by migration
   `002_fix_category_and_senora.sql` from region `bangladesh` to
   region `review`. No other row was changed.
+
+## 8. PHASE A FIXES — 2026-11-15 (ChatGPT independent review)
+
+1. **Senora / World Football display.** Moving id 1173 to
+   region `review` was not enough: the homepage showed every
+   relevant/recent review item as World Football, including this
+   business story. `app.py` now shows a review item as World
+   Football only when its link is in a football section
+   (`link LIKE '%/football/%'`); the same rule applies to
+   Transfers. The Senora row stays in the database in region
+   `review` and appears in no football category. Regression test
+   in `tests/test_phase_a.py` proves it. World now shows 2 RSS
+   items (Messi Golden Boot, Real Madrid tribute); Transfers
+   still shows 1.
+2. **Dry-run read-only.** The first runner created the
+   `schema_migrations` table before checking `--dry-run`.
+   `run_migrations.py` now opens the database with SQLite URI
+   `mode=ro` in dry-run mode: no table creation, no backup, no
+   writes of any kind. Verified by `tests/test_migrations.py`
+   (SHA-256 + schema dump identical before/after).
+3. **Migration failure safety.** The first runner used
+   `executescript`, which in Python 3.12 implicitly commits
+   before running, so a mid-migration failure left earlier
+   statements applied — the old "rolled back" claim was wrong.
+   The runner now splits each migration into statements and
+   applies them plus the `schema_migrations` record inside one
+   explicit transaction. A failed migration rolls back in full,
+   is not recorded, and the runner stops; earlier migrations
+   stay applied, later ones are not attempted. Failure-injection
+   tests in `tests/test_migrations.py` prove this on a temporary
+   database. `BACKUP_AND_ROLLBACK.md` now describes this exactly.
+4. **Live Football API mocked tests.** Routes unchanged. New
+   `tests/test_live_api.py` mocks `requests.get` and covers
+   successful `/api/live` and `/api/match/<id>`, empty results,
+   API error responses, connection timeouts and invalid JSON.
+   No real key is used anywhere (fake test key only).
