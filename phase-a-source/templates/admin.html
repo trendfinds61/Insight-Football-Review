@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Insight Football | Admin Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+
+<header class="header">
+    <div class="logo">INSIGHT <span>FOOTBALL</span></div>
+    <nav>
+        <a href="/">View Website</a>
+        <a href="/logout">Log out</a>
+    </nav>
+</header>
+
+<main class="container">
+    <div class="admin-box">
+        <h1>Admin News Dashboard</h1>
+        <p>Add a new football news article.</p>
+
+        <form method="POST" action="/admin">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+            <label>News Title</label>
+            <input type="text" name="title" placeholder="Enter news title" required>
+
+            <label>Category</label>
+            <select name="category" required>
+                <option value="WORLD FOOTBALL">World Football</option>
+                <option value="TRANSFERS">Transfer News</option>
+                <option value="INTERNATIONAL FOOTBALL">International Football</option>
+                <option value="BANGLADESH FOOTBALL">Bangladesh Football</option>
+            </select>
+
+            <label>News Image URL</label>
+            <input type="url" name="image_url" placeholder="Paste image URL here">
+
+            <label>News Content</label>
+            <textarea name="content" placeholder="Write your original news summary..." required></textarea>
+
+            <label>News Source</label>
+            <input type="text" name="source" placeholder="Enter source name or URL">
+
+            <button type="submit">PUBLISH NEWS</button>
+
+        </form>
+    </div>
+</main>
+
+</body>
+</html>

@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Insight Football | Global Football News</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        .live-section {
+            margin: 35px 0;
+            padding: 22px;
+            background: #f5f8f6;
+            border-radius: 10px;
+        }
+        .live-heading {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        .live-heading h2 { color: #17202a; }
+        .live-badge {
+            color: #fff;
+            background: #e32636;
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .refresh-btn {
+            background: #168b45;
+            color: white;
+            border: 0;
+            border-radius: 5px;
+            padding: 10px 15px;
+            cursor: pointer;
+        }
+        .match-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 14px;
+        }
+        .match-card {
+            background: white;
+            border: 1px solid #e1e7e3;
+            border-radius: 8px;
+            padding: 16px;
+        }
+        .match-league {
+            color: #68727d;
+            font-size: 12px;
+            margin-bottom: 12px;
+        }
+        .match-team {
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            margin: 10px 0;
+            font-weight: bold;
+        }
+        .match-team img {
+            width: 27px;
+            height: 27px;
+            object-fit: contain;
+        }
+        .match-score {
+            margin-left: auto;
+            font-size: 20px;
+            font-weight: bold;
+        }
+        .match-status {
+            color: #e32636;
+            font-size: 12px;
+            font-weight: bold;
+            margin-top: 12px;
+        }
+        .live-message {
+            color: #68727d;
+            padding: 15px 0;
+        }
+    </style>
+</head>
+<body>
+
+<header class="header">
+    <div class="logo">INSIGHT <span>FOOTBALL</span></div>
+    <nav>
+        <a href="/">Home</a>
+        <a href="#live">Live Football</a>
+        <a href="#latest">Latest News</a>
+        <a href="#world">World</a>
+        <a href="#transfers">Transfers</a>
+        <a href="#international">International</a>
+        <a href="#bangladesh">Bangladesh</a>
+    </nav>
+</header>
+
+<section class="breaking">
+    <strong>BREAKING NEWS</strong>
+    <marquee>Welcome to Insight Football — Your Global Football News Destination</marquee>
+</section>
+
+<main class="container">
+
+    <section class="hero">
+        <div class="hero-content">
+            <span class="tag">WELCOME TO INSIGHT FOOTBALL</span>
+            <h1>THE WORLD OF FOOTBALL, ALL IN ONE PLACE.</h1>
+            <p>Breaking news, transfer updates, match reports and exclusive football stories from around the world.</p>
+            <a href="#latest" class="btn">EXPLORE LATEST NEWS</a>
+        </div>
+        <div class="hero-graphic">
+            <div class="football">⚽</div>
+            <div class="graphic-text">THE BEAUTIFUL GAME</div>
+        </div>
+    </section>
+
+    <section id="live" class="live-section">
+        <div class="live-heading">
+            <h2>LIVE FOOTBALL <span class="live-badge">LIVE</span></h2>
+            <button class="refresh-btn" onclick="loadLiveScores()">↻ Refresh</button>
+        </div>
+
+        <p id="live-message" class="live-message">Loading live matches...</p>
+        <div id="match-grid" class="match-grid"></div>
+    </section>
+
+    <section id="latest" class="section">
+        <div class="section-heading">
+            <h2>LATEST FOOTBALL NEWS</h2>
+            <span>STAY UPDATED</span>
+        </div>
+
+        <div class="news-grid">
+            {% if news %}
+                {% for item in news %}
+                <article class="news-card">
+                    {% if item.image_url %}
+                    <img src="{{ item.image_url }}" alt="{{ item.title }}" class="news-photo">
+                    {% else %}
+                    <div class="news-image">⚽</div>
+                    {% endif %}
+                    <div class="news-info">
+                        <span class="category">{{ item.category }}</span>
+                        <h3>{{ item.title }}</h3>
+                        <p>{{ item.content }}</p>
+                        <small>Source: {{ item.source }}</small>
+                    </div>
+                </article>
+                {% endfor %}
+            {% else %}
+                <p>No football news available yet.</p>
+            {% endif %}
+        </div>
+    </section>
+
+    <section id="world" class="section">
+        <div class="section-heading">
+            <h2>WORLD FOOTBALL</h2>
+        </div>
+        <p class="section-description">Football stories from around the world.</p>
+        <div class="news-grid">
+            {% if world_news %}
+                {% for item in world_news %}
+                <article class="news-card">
+                    {% if item.image_url %}
+                    <img src="{{ item.image_url }}" alt="{{ item.title }}" class="news-photo">
+                    {% else %}
+                    <div class="news-image">⚽</div>
+                    {% endif %}
+                    <div class="news-info">
+                        <span class="category">{{ item.category }}</span>
+                        <h3>{{ item.title }}</h3>
+                        <p>{{ item.content }}</p>
+                        <small>Source: {{ item.source }}</small>
+                    </div>
+                </article>
+                {% endfor %}
+            {% endif %}
+            {% if rss_world %}
+                {% for item in rss_world %}
+                <article class="news-card">
+                    {% if item.image_url %}
+                    <img src="{{ item.image_url }}" alt="{{ item.title }}" class="news-photo">
+                    {% else %}
+                    <div class="news-image">⚽</div>
+                    {% endif %}
+                    <div class="news-info">
+                        <span class="category">WORLD FOOTBALL</span>
+                        <h3><a href="{{ item.link }}" target="_blank" rel="noopener">{{ item.title }}</a></h3>
+                        <p>{{ item.summary }}</p>
+                        <small>Source: {{ item.source }} (RSS) &middot; {{ item.published_at }}</small>
+                    </div>
+                </article>
+                {% endfor %}
+            {% endif %}
+            {% if not world_news and not rss_world %}
+                <p>No world football news available yet.</p>
+            {% endif %}
+        </div>
+    </section>
+
+    <section id="international" class="section">
+        <div class="section-heading">
+            <h2>INTERNATIONAL FOOTBALL</h2>
+        </div>
+        <p class="section-description">National teams, international tournaments and global football stories.</p>
+        <div class="news-grid">
+            {% if international_news %}
+                {% for item in international_news %}
+                <article class="news-card">
+                    {% if item.image_url %}
+                    <img src="{{ item.image_url }}" alt="{{ item.title }}" class="news-photo">
+                    {% else %}
+                    <div class="news-image">⚽</div>
+                    {% endif %}
+                    <div class="news-info">
+                        <span class="category">{{ item.category }}</span>
+                        <h3>{{ item.title }}</h3>
+                        <p>{{ item.content }}</p>
+                        <small>Source: {{ item.source }}</small>
+                    </div>
+                </article>
+                {% endfor %}
+            {% endif %}
+            {% if rss_international %}
+                {% for item in rss_international %}
+                <article class="news-card">
+                    {% if item.image_url %}
+                    <img src="{{ item.image_url }}" alt="{{ item.title }}" class="news-photo">
+                    {% else %}
+                    <div class="news-image">⚽</div>
+                    {% endif %}
+                    <div class="news-info">
+                        <span class="category">INTERNATIONAL FOOTBALL</span>
+                        <h3><a href="{{ item.link }}" target="_blank" rel="noopener">{{ item.title }}</a></h3>
+                        <p>{{ item.summary }}</p>
+                        <small>Source: {{ item.source }} (RSS) &middot; {{ item.published_at }}</small>
+                    </div>
+                </article>
+                {% endfor %}
+            {% endif %}
+            {% if not international_news and not rss_international %}
+                <p>No international football news available yet.</p>
+            {% endif %}
+        </div>
+    </section>
+
+    <section id="bangladesh" class="section bangladesh">
+        <div class="section-heading">
+            <h2>BANGLADESH FOOTBALL</h2>
+        </div>
+        <p class="section-description">News, results and stories from Bangladesh football.</p>
+        <div class="news-grid">
+            {% if bangladesh_news %}
+                {% for item in bangladesh_news %}
+                <article class="news-card">
+                    {% if item.image_url %}
+                    <img src="{{ item.image_url }}" alt="{{ item.title }}" class="news-photo">
+                    {% else %}
+                    <div class="news-image">⚽</div>
+                    {% endif %}
+                    <div class="news-info">
+                        <span class="category">{{ item.category }}</span>
+                        <h3>{{ item.title }}</h3>
+                        <p>{{ item.content }}</p>
+                        <small>Source: {{ item.source }}</small>
+                    </div>
+                </article>
+                {% endfor %}
+            {% endif %}
+            {% if rss_bangladesh %}
+                {% for item in rss_bangladesh %}
+                <article class="news-card">
+                    {% if item.image_url %}
+                    <img src="{{ item.image_url }}" alt="{{ item.title }}" class="news-photo">
+                    {% else %}
+                    <div class="news-image">⚽</div>
+                    {% endif %}
+                    <div class="news-info">
+                        <span class="category">BANGLADESH FOOTBALL</span>
+                        <h3><a href="{{ item.link }}" target="_blank" rel="noopener">{{ item.title }}</a></h3>
+                        <p>{{ item.summary }}</p>
+                        <small>Source: {{ item.source }} (RSS) &middot; {{ item.published_at }}</small>
+                    </div>
+                </article>
+                {% endfor %}
+            {% endif %}
+            {% if not bangladesh_news and not rss_bangladesh %}
+                <p>No Bangladesh football news available yet.</p>
+            {% endif %}
+        </div>
+    </section>
+
+    <section id="transfers" class="section">
+        <div class="section-heading">
+            <h2>TRANSFER CENTRE</h2>
+        </div>
+        <p class="section-description">Confirmed deals, transfer reports and the latest market updates.</p>
+        <div class="news-grid">
+            {% if transfer_news %}
+                {% for item in transfer_news %}
+                <article class="news-card">
+                    {% if item.image_url %}
+                    <img src="{{ item.image_url }}" alt="{{ item.title }}" class="news-photo">
+                    {% else %}
+                    <div class="news-image">⚽</div>
+                    {% endif %}
+                    <div class="news-info">
+                        <span class="category">{{ item.category }}</span>
+                        <h3>{{ item.title }}</h3>
+                        <p>{{ item.content }}</p>
+                        <small>Source: {{ item.source }}</small>
+                    </div>
+                </article>
+                {% endfor %}
+            {% endif %}
+            {% if rss_transfers %}
+                {% for item in rss_transfers %}
+                <article class="news-card">
+                    {% if item.image_url %}
+                    <img src="{{ item.image_url }}" alt="{{ item.title }}" class="news-photo">
+                    {% else %}
+                    <div class="news-image">⚽</div>
+                    {% endif %}
+                    <div class="news-info">
+                        <span class="category">TRANSFERS</span>
+                        <h3><a href="{{ item.link }}" target="_blank" rel="noopener">{{ item.title }}</a></h3>
+                        <p>{{ item.summary }}</p>
+                        <small>Source: {{ item.source }} (RSS) &middot; {{ item.published_at }}</small>
+                    </div>
+                </article>
+                {% endfor %}
+            {% endif %}
+            {% if not transfer_news and not rss_transfers %}
+                <p>No transfer news available yet.</p>
+            {% endif %}
+        </div>
+    </section>
+
+</main>
+
+<footer>
+    <div class="logo">INSIGHT <span>FOOTBALL</span></div>
+    <p>Global Football. One Insight.</p>
+    <p>© 2026 Insight Football. All rights reserved.</p>
+</footer>
+
+<script>
+async function loadLiveScores() {
+    const message = document.getElementById("live-message");
+    const grid = document.getElementById("match-grid");
+
+    message.textContent = "Loading live matches...";
+    grid.innerHTML = "";
+
+    try {
+        const response = await fetch("/api/live");
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+            throw new Error("Live scores are temporarily unavailable.");
+        }
+
+        if (!data.matches || data.matches.length === 0) {
+            message.textContent = "No live matches at the moment.";
+            return;
+        }
+
+        message.textContent = data.total + " live matches found.";
+
+        data.matches.forEach(match => {
+            const card = document.createElement("div");
+            card.className = "match-card";
+
+            const league = document.createElement("div");
+            league.className = "match-league";
+            league.textContent = match.country + " • " + match.league;
+
+            const home = document.createElement("div");
+            home.className = "match-team";
+
+            const homeLogo = document.createElement("img");
+            homeLogo.src = match.home_logo;
+            homeLogo.alt = "";
+            homeLogo.onerror = function() { this.style.display = "none"; };
+
+            const homeName = document.createElement("span");
+            homeName.textContent = match.home;
+
+            const homeScore = document.createElement("span");
+            homeScore.className = "match-score";
+            homeScore.textContent = match.home_score ?? "-";
+
+            home.append(homeLogo, homeName, homeScore);
+
+            const away = document.createElement("div");
+            away.className = "match-team";
+
+            const awayLogo = document.createElement("img");
+            awayLogo.src = match.away_logo;
+            awayLogo.alt = "";
+            awayLogo.onerror = function() { this.style.display = "none"; };
+
+            const awayName = document.createElement("span");
+            awayName.textContent = match.away;
+
+            const awayScore = document.createElement("span");
+            awayScore.className = "match-score";
+            awayScore.textContent = match.away_score ?? "-";
+
+            away.append(awayLogo, awayName, awayScore);
+
+            const status = document.createElement("div");
+            status.className = "match-status";
+            status.textContent = match.elapsed != null
+                ? match.elapsed + "' • " + match.status
+                : match.status;
+
+            card.append(league, home, away, status);
+
+            card.style.cursor = "pointer";
+            card.addEventListener("click", () => {
+                window.location.href = "/match/" + match.id;
+            });
+
+            grid.appendChild(card);
+        });
+
+    } catch (error) {
+        message.textContent = error.message;
+    }
+}
+
+loadLiveScores();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Match Centre | Insight Football</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #f4f7f5;
+            color: #17212b;
+        }
+        header {
+            background: #101c2c;
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+        header span { color: #20c878; }
+        .container {
+            max-width: 950px;
+            margin: 25px auto;
+            padding: 15px;
+        }
+        .score-card {
+            background: white;
+            padding: 30px 15px;
+            border-radius: 12px;
+            text-align: center;
+            box-shadow: 0 3px 12px #00000010;
+        }
+        .teams {
+            display: flex;
+            align-items: center;
+            justify-content: space-around;
+            gap: 10px;
+        }
+        .team { flex: 1; font-weight: bold; }
+        .team img {
+            width: 55px;
+            height: 55px;
+            object-fit: contain;
+            display: block;
+            margin: 0 auto 10px;
+        }
+        .score {
+            font-size: 35px;
+            font-weight: bold;
+        }
+        .status {
+            color: #e32636;
+            margin-top: 15px;
+            font-weight: bold;
+        }
+        .section {
+            background: white;
+            margin-top: 20px;
+            padding: 20px;
+            border-radius: 10px;
+        }
+        .section h2 {
+            font-size: 19px;
+            border-bottom: 2px solid #20c878;
+            padding-bottom: 10px;
+        }
+        .event {
+            padding: 12px;
+            border-bottom: 1px solid #eee;
+        }
+        .event-time {
+            color: #168b53;
+            font-weight: bold;
+        }
+        .empty {
+            color: #68727d;
+            text-align: center;
+            padding: 15px;
+        }
+        .back {
+            display: inline-block;
+            margin-bottom: 15px;
+            color: #168b53;
+            text-decoration: none;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <h2>INSIGHT <span>FOOTBALL</span></h2>
+    <p>Match Centre</p>
+</header>
+
+<div class="container">
+
+    <a href="/" class="back">← Back to Home</a>
+
+    <div class="score-card">
+        <div id="league">Loading match...</div>
+
+        <div class="teams">
+            <div class="team">
+                <img id="home-logo" src="" alt="">
+                <div id="home-name">Home Team</div>
+            </div>
+
+            <div class="score" id="score">- : -</div>
+
+            <div class="team">
+                <img id="away-logo" src="" alt="">
+                <div id="away-name">Away Team</div>
+            </div>
+        </div>
+
+        <div class="status" id="status">Loading...</div>
+    </div>
+
+    <div class="section">
+        <h2>LIVE MATCH COMMENTARY / EVENTS</h2>
+        <div id="events" class="empty">Loading match events...</div>
+    </div>
+
+    <div class="section">
+        <h2>INSIGHT FOOTBALL RELATED NEWS</h2>
+        <div id="related-news" class="empty">
+            Loading related news...
+        </div>
+    </div>
+
+</div>
+
+<script>
+const fixtureId = "{{ fixture_id }}";
+
+async function loadMatch() {
+    try {
+        const response = await fetch("/api/match/" + fixtureId);
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+            throw new Error("Match information unavailable.");
+        }
+
+        const match = data.match;
+
+        document.getElementById("league").textContent =
+            match.country + " • " + match.league;
+
+        document.getElementById("home-name").textContent = match.home;
+        document.getElementById("away-name").textContent = match.away;
+
+        document.getElementById("home-logo").src = match.home_logo || "";
+        document.getElementById("away-logo").src = match.away_logo || "";
+
+        document.getElementById("score").textContent =
+            (match.home_score ?? "-") + " : " +
+            (match.away_score ?? "-");
+
+        document.getElementById("status").textContent =
+            match.elapsed != null
+                ? match.elapsed + "' • " + match.status
+                : match.status;
+
+        const eventsBox = document.getElementById("events");
+        eventsBox.innerHTML = "";
+
+        if (!data.events || data.events.length === 0) {
+            eventsBox.textContent = "No match events available yet.";
+        } else {
+            data.events.forEach(event => {
+                const item = document.createElement("div");
+                item.className = "event";
+
+                const time = document.createElement("span");
+                time.className = "event-time";
+                time.textContent = event.time.elapsed + "' ";
+
+                const details = document.createElement("span");
+                details.textContent =
+                    event.team.name + " • " +
+                    event.player.name + " • " +
+                    event.type + " - " + event.detail;
+
+                item.append(time, details);
+                eventsBox.appendChild(item);
+            });
+        }
+
+        const newsBox = document.getElementById("related-news");
+        newsBox.textContent = data.related_news.length
+            ? ""
+            : "No related Insight Football news available yet.";
+
+        data.related_news.forEach(article => {
+            const item = document.createElement("div");
+            item.className = "event";
+            item.textContent = article.title;
+            newsBox.appendChild(item);
+        });
+
+    } catch (error) {
+        document.getElementById("league").textContent = error.message;
+        document.getElementById("events").textContent =
+            "Unable to load match events.";
+    }
+}
+
+loadMatch();
+
+// Auto refresh every 60 seconds
+setInterval(loadMatch, 60000);
+</script>
+
+</body>
+</html>

@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Insight Football | Admin Login</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+
+<header class="header">
+    <div class="logo">INSIGHT <span>FOOTBALL</span></div>
+    <nav>
+        <a href="/">View Website</a>
+    </nav>
+</header>
+
+<main class="container">
+    <div class="admin-box">
+        <h1>Admin Login</h1>
+        <p>Sign in to manage Insight Football news.</p>
+
+        {% if error %}
+        <p class="login-error">{{ error }}</p>
+        {% endif %}
+
+        <form method="POST" action="{{ url_for('login', next=request.args.get('next', '')) }}">
+            <label>Admin Password</label>
+            <input type="password" name="password" placeholder="Enter admin password" required>
+            <button type="submit">LOG IN</button>
+        </form>
+
+        <p><small>Admin login works only when the ADMIN_PASSWORD environment variable is set. There is no default password.</small></p>
+    </div>
+</main>
+
+</body>
+</html>
