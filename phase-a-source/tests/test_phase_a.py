@@ -12,6 +12,8 @@ database_before_*.db snapshots (they are not needed for these tests).
 Tests cover Phase A only:
   - homepage shows RSS items in the four categories, each link once
   - category rendering (Transfer row now matches 'TRANSFERS')
+  - Senora regression: the business story appears in no football
+    category, while its database row is preserved in region='review'
   - /admin requires login; unauthenticated GET/POST are redirected
   - login fails closed when ADMIN_PASSWORD is not set
   - login with ADMIN_PASSWORD works, then an admin POST inserts news
@@ -19,6 +21,10 @@ Tests cover Phase A only:
   - /api/live and /api/match return the original 500 behaviour
     when no API_FOOTBALL_KEY is set (no key is used in these tests)
   - database counts and integrity on the test copy
+
+Mocked Live Football API tests (success, empty, errors, timeouts)
+live in tests/test_live_api.py; migration dry-run and failure
+tests live in tests/test_migrations.py.
 
 No network access is used: the live-score tests only check the
 no-API-key path, and no RSS fetch is performed.
@@ -93,9 +99,11 @@ class PhaseATestCase(unittest.TestCase):
         self.assertIn("Transfer Centre LIVE!", html)  # Transfers (RSS)
         self.assertIn("Messi wins second MLS Golden Boot", html)  # World (RSS)
         self.assertIn("Timely lift as SAFF stakes rise", html)  # Bangladesh (RSS)
-        # Senora row is region='review' after migration 002, so it is
-        # shown in World, not in Bangladesh.
-        self.assertIn("Senora to run 14 pad dispensers", html)
+        # Senora business story (id 1173) must NOT appear anywhere:
+        # region='review' items are shown as World Football only when
+        # their link is in a football section, and its link is in
+        # /business/. See test_senora_business_story_in_no_category.
+        self.assertNotIn("Senora to run 14 pad dispensers", html)
         self.assertIn('(RSS)', html)
         # Category headings are all rendered with content now.
         for heading in ("WORLD FOOTBALL", "TRANSFER CENTRE",
@@ -123,9 +131,43 @@ class PhaseATestCase(unittest.TestCase):
             if count == 1:
                 shown += 1
         # At most 20 per category are shown, so shown <= 80, and at
-        # least the 3 Bangladesh + 1 Transfer + 2 World items appear.
-        self.assertGreaterEqual(shown, 6)
+        # least the 2 Bangladesh + 1 Transfer + 2 World items appear.
+        self.assertGreaterEqual(shown, 5)
         self.assertLessEqual(shown, 80)
+
+    def test_senora_business_story_in_no_football_category(self):
+        """Regression test (ChatGPT review): the Senora business story
+        must not appear in any football category, while its database
+        row is preserved untouched in the review pool."""
+        resp = self.client.get("/")
+        html = resp.get_data(as_text=True)
+        self.assertNotIn("Senora to run 14 pad dispensers", html)
+        self.assertNotIn(
+            "https://www.dhakatribune.com/business/423945/"
+            "senora-to-run-14-pad-dispensers-at-federations", html)
+        # The World section still shows real football, not the
+        # business story.
+        self.assertIn("Messi wins second MLS Golden Boot", html)
+        self.assertIn(
+            "Real Madrid and Valencia honour Jesus de Miguel", html)
+        # The original record is preserved, not deleted: still
+        # region='review', still in the review pool, counts unchanged.
+        conn = sqlite3.connect(self.workdir / "database.db")
+        row = conn.execute(
+            "SELECT title, region, link FROM rss_items WHERE id=1173"
+        ).fetchone()
+        self.assertIsNotNone(row)
+        self.assertEqual(row[1], "review")
+        self.assertIn("/business/423945/", row[2])
+        self.assertEqual(
+            conn.execute("SELECT COUNT(*) FROM rss_items").fetchone()[0], 254)
+        self.assertEqual(
+            conn.execute("SELECT COUNT(*) FROM rss_items "
+                         "WHERE region='review'").fetchone()[0], 136)
+        self.assertEqual(
+            conn.execute("SELECT COUNT(*) FROM rss_items "
+                         "WHERE region='bangladesh'").fetchone()[0], 2)
+        conn.close()
 
     def test_admin_get_unauthenticated_redirects_to_login(self):
         resp = self.client.get("/admin")
